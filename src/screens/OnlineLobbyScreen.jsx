@@ -1,23 +1,46 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { useGameStore } from '../store/gameStore';
+import { isFirebaseConfigured } from '../multiplayer/firebaseConfig';
 import { createRoom, joinRoom, markRoomStarted } from '../multiplayer/roomManager';
 import { subscribeToRoom } from '../multiplayer/firebaseSync';
-import { GAME_MODES } from '../game-logic/constants';
+
+function FirebaseNotConfigured({ onBack }) {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-violet-900 flex flex-col items-center justify-center p-6 gap-5 text-center">
+      <div className="text-5xl">🔧</div>
+      <h2 className="text-white font-bold text-xl">Firebase Not Configured</h2>
+      <p className="text-white/60 text-sm max-w-xs">
+        Copy <code className="bg-white/10 px-1 rounded">.env.example</code> to{' '}
+        <code className="bg-white/10 px-1 rounded">.env</code> and add your Firebase
+        credentials to enable online multiplayer.
+      </p>
+      <button
+        onClick={onBack}
+        className="mt-4 px-6 py-3 rounded-2xl bg-white/10 border border-white/20 text-white font-bold"
+      >
+        ← Back
+      </button>
+    </div>
+  );
+}
 
 export default function OnlineLobbyScreen() {
   const setScreen  = useGameStore(s => s.setScreen);
   const startGame  = useGameStore(s => s.startGame);
   const mode       = useGameStore(s => s.setup.mode);
 
-  const [tab, setTab]             = useState('create'); // 'create' | 'join'
+  const [tab, setTab]               = useState('create');
   const [playerName, setPlayerName] = useState('');
-  const [joinCode, setJoinCode]   = useState('');
-  const [roomCode, setRoomCode]   = useState('');
-  const [roomInfo, setRoomInfo]   = useState(null);
-  const [error, setError]         = useState('');
-  const [loading, setLoading]     = useState(false);
-  const [myUid, setMyUid]         = useState(null);
+  const [joinCode, setJoinCode]     = useState('');
+  const [roomCode, setRoomCode]     = useState('');
+  const [roomInfo, setRoomInfo]     = useState(null);
+  const [error, setError]           = useState('');
+  const [loading, setLoading]       = useState(false);
+  const [myUid, setMyUid]           = useState(null);
+
+  if (!isFirebaseConfigured()) {
+    return <FirebaseNotConfigured onBack={() => setScreen('home')} />;
+  }
 
   const handleCreate = async () => {
     if (!playerName.trim()) { setError('Enter your name'); return; }
@@ -28,16 +51,14 @@ export default function OnlineLobbyScreen() {
       setMyUid(uid);
       subscribeToRoom(code, (room) => {
         setRoomInfo(room);
-        const allPlayers = Object.values(room.players || {});
         if (room.status === 'playing') {
+          const allPlayers = Object.values(room.players || {});
           startGame({
-            mode: room.mode,
-            gameType: 'online',
+            mode: room.mode, gameType: 'online',
             localPlayerId: allPlayers.find(p => p.uid === uid)?.colorId,
             roomCode: code,
             playerConfigs: allPlayers.map(p => ({
-              id: p.colorId,
-              name: p.name,
+              id: p.colorId, name: p.name,
               type: p.uid === uid ? 'human' : 'remote',
             })),
           });
@@ -52,7 +73,7 @@ export default function OnlineLobbyScreen() {
 
   const handleJoin = async () => {
     if (!playerName.trim()) { setError('Enter your name'); return; }
-    if (!joinCode.trim()) { setError('Enter room code'); return; }
+    if (!joinCode.trim())   { setError('Enter room code'); return; }
     setLoading(true); setError('');
     try {
       const { code, uid } = await joinRoom({ code: joinCode.toUpperCase(), playerName: playerName.trim() });
@@ -60,16 +81,14 @@ export default function OnlineLobbyScreen() {
       setMyUid(uid);
       subscribeToRoom(code, (room) => {
         setRoomInfo(room);
-        const allPlayers = Object.values(room.players || {});
         if (room.status === 'playing') {
+          const allPlayers = Object.values(room.players || {});
           startGame({
-            mode: room.mode,
-            gameType: 'online',
+            mode: room.mode, gameType: 'online',
             localPlayerId: allPlayers.find(p => p.uid === uid)?.colorId,
             roomCode: code,
             playerConfigs: allPlayers.map(p => ({
-              id: p.colorId,
-              name: p.name,
+              id: p.colorId, name: p.name,
               type: p.uid === uid ? 'human' : 'remote',
             })),
           });
@@ -106,16 +125,19 @@ export default function OnlineLobbyScreen() {
           ))}
         </div>
 
-        {connectedPlayers[0]?.uid === myUid && connectedPlayers.length >= 2 && (
+        {connectedPlayers[0]?.uid === myUid && connectedPlayers.length >= 2 ? (
           <button
             onClick={() => markRoomStarted(roomCode)}
             className="w-full max-w-sm py-4 rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-400 text-gray-900 font-extrabold text-lg"
           >
             🎲 Start Game
           </button>
-        )}
-        {connectedPlayers[0]?.uid !== myUid && (
-          <p className="text-white/50 text-sm">Waiting for host to start…</p>
+        ) : (
+          <p className="text-white/50 text-sm">
+            {connectedPlayers[0]?.uid === myUid
+              ? 'Waiting for more players…'
+              : 'Waiting for host to start…'}
+          </p>
         )}
       </div>
     );
@@ -128,13 +150,14 @@ export default function OnlineLobbyScreen() {
         <h2 className="text-white font-bold text-xl">Online Multiplayer</h2>
       </div>
 
-      {/* Tabs */}
       <div className="flex bg-white/10 rounded-xl p-1">
         {['create', 'join'].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t ? 'bg-white text-gray-900' : 'text-white/60'}`}
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+              tab === t ? 'bg-white text-gray-900' : 'text-white/60'
+            }`}
           >
             {t === 'create' ? '+ Create Room' : '→ Join Room'}
           </button>

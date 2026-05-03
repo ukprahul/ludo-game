@@ -1,38 +1,29 @@
 import { ref, onValue, off, update } from 'firebase/database';
-import { db } from './firebaseConfig';
+import { getFirebaseDB } from './firebaseConfig';
 import { pushGameState } from './roomManager';
 
-// ─── Subscribe to room state changes ─────────────────────────────────────────
 export function subscribeToRoom(code, onRoomChange) {
+  const db = getFirebaseDB();
   const roomRef = ref(db, `rooms/${code}`);
-  const unsubscribe = onValue(roomRef, (snap) => {
-    if (!snap.exists()) return;
-    onRoomChange(snap.val());
-  });
-  return () => off(roomRef, 'value', unsubscribe);
+  onValue(roomRef, (snap) => { if (snap.exists()) onRoomChange(snap.val()); });
+  return () => off(roomRef);
 }
 
-// ─── Subscribe to game state ──────────────────────────────────────────────────
 export function subscribeToGameState(code, onStateChange) {
+  const db = getFirebaseDB();
   const stateRef = ref(db, `rooms/${code}/gameState`);
-  const unsubscribe = onValue(stateRef, (snap) => {
+  onValue(stateRef, (snap) => {
     if (!snap.exists()) return;
-    try {
-      const state = JSON.parse(snap.val());
-      onStateChange(state);
-    } catch (e) {
-      console.error('Failed to parse game state', e);
-    }
+    try { onStateChange(JSON.parse(snap.val())); } catch {}
   });
-  return () => off(stateRef, 'value', unsubscribe);
+  return () => off(stateRef);
 }
 
-// ─── Send a move to the room ──────────────────────────────────────────────────
 export async function broadcastMove(code, gameState) {
   await pushGameState(code, gameState);
 }
 
-// ─── Mark player as reconnected ───────────────────────────────────────────────
 export async function markReconnected(code, uid) {
+  const db = getFirebaseDB();
   await update(ref(db, `rooms/${code}/players/${uid}`), { connected: true });
 }
