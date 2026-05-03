@@ -12,8 +12,6 @@ export function dealPowerCards() {
   return dealt.map((type, id) => ({ id, type, used: false }));
 }
 
-// ─── Safe zone absolute indices on main track ─────────────────────────────────
-const SAFE_INDICES = Array.from(SAFE_ZONE_INDICES);
 
 // ─── Apply a power card; returns updated state ────────────────────────────────
 export function applyPowerCard(gameState, actingPlayerId, cardType, payload) {
