@@ -50,32 +50,30 @@ export default function GameScreen() {
     return () => clearInterval(id);
   }, [currentPlayerIndex, mode]);
 
-  // ── Bot: roll ─────────────────────────────────────────────────────────────
+  // ── Bot: roll (150 ms pause so player can see whose turn it is, then roll) ──
   useEffect(() => {
     if (!isBot || phase !== GAME_PHASES.ROLLING) return;
-    botTimerRef.current = setTimeout(() => {
-      handleRoll();
-    }, 500);   // ← was 600+900 ms, now 500 ms
+    botTimerRef.current = setTimeout(() => handleRoll(), 150);
     return () => clearTimeout(botTimerRef.current);
   }, [phase, currentPlayerIndex, isBot]);
 
-  // ── Bot: move ─────────────────────────────────────────────────────────────
+  // ── Bot: move (250 ms after dice lands so player can read the value) ────────
   useEffect(() => {
     if (!isBot || phase !== GAME_PHASES.MOVING) return;
     const t = setTimeout(() => {
       const move = chooseBotMove(currentPlayer, diceValues[0], players, currentPlayer.aiDifficulty);
       if (move) { playSound('move'); moveToken(move.tokenId); }
       else forceSkipTurn();
-    }, 400);   // ← was 700 ms, now 400 ms
+    }, 250);
     return () => clearTimeout(t);
   }, [phase, isBot, diceValues]);
 
-  // ── Human: roll ───────────────────────────────────────────────────────────
+  // ── Human: roll (300 ms animation — snappy for human, same code path for bot) ─
   const handleRoll = useCallback(() => {
     if (isRolling || phase !== GAME_PHASES.ROLLING) return;
     setIsRolling(true);
     playSound('dice');
-    setTimeout(() => { rollDiceAction(); setIsRolling(false); }, 500);
+    setTimeout(() => { rollDiceAction(); setIsRolling(false); }, 300);
   }, [isRolling, phase, rollDiceAction]);
 
   // ── Token click ───────────────────────────────────────────────────────────

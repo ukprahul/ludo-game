@@ -38,8 +38,8 @@ export default function DiceRoller({ values = [], isRolling = false, canRoll = f
       let n = 0;
       const id = setInterval(() => {
         setDisplay(Array.from({ length: values.length || 1 }, () => Math.ceil(Math.random() * 6)));
-        if (++n >= 8) clearInterval(id);
-      }, 65);
+        if (++n >= 5) clearInterval(id);   // fewer frames to match 300ms window
+      }, 55);
       return () => clearInterval(id);
     } else {
       setDisplay(values);
