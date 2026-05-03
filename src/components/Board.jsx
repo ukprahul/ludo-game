@@ -1,87 +1,52 @@
-import { useMemo, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { CELL_MAP, getTokenCell, HOME_BASE_POSITIONS } from '../game-logic/boardPaths';
 import { PLAYER_COLORS, PLAYERS } from '../game-logic/constants';
 import Token from './Token';
 
-// ─── Color utilities ──────────────────────────────────────────────────────────
-const HOME_BG = {
-  red:    '#fee2e2',
-  blue:   '#dbeafe',
-  green:  '#dcfce7',
-  yellow: '#fef9c3',
-};
-const STRETCH_BG = {
-  red:    '#fca5a5',
-  blue:   '#93c5fd',
-  green:  '#86efac',
-  yellow: '#fde047',
-};
-const START_BG = {
-  red:    '#ef4444',
-  blue:   '#3b82f6',
-  green:  '#22c55e',
-  yellow: '#eab308',
-};
+// ─── Cell color palette ───────────────────────────────────────────────────────
+const HOME_LIGHT  = { red: '#fee2e2', blue: '#dbeafe', green: '#dcfce7', yellow: '#fef9c3' };
+const STRETCH_COL = { red: '#ef4444', blue: '#3b82f6', green: '#22c55e', yellow: '#eab308' };
+const START_COL   = { red: '#ef4444', blue: '#3b82f6', green: '#22c55e', yellow: '#eab308' };
 
-function cellBackground(cell) {
+function cellBg(cell) {
   switch (cell.type) {
-    case 'void':        return '#c8a96e';
-    case 'home':        return HOME_BG[cell.player];
-    case 'path':        return '#ffffff';
-    case 'safe':        return '#e0f2fe';
-    case 'start':       return START_BG[cell.player];
-    case 'homestretch': return STRETCH_BG[cell.player];
-    case 'center':      return '#7c3aed';
-    case 'center-zone': return STRETCH_BG[cell.player];
-    case 'center-path': return '#ffffff';
-    default:            return '#ffffff';
+    case 'void':         return '#b45309';
+    case 'home':         return HOME_LIGHT[cell.player];
+    case 'path':         return '#ffffff';
+    case 'safe':         return '#f0fdf4';
+    case 'start':        return START_COL[cell.player];
+    case 'homestretch':  return STRETCH_COL[cell.player];
+    case 'center':       return '#7c3aed';
+    case 'center-zone':  return STRETCH_COL[cell.player];
+    case 'center-path':  return '#ede9fe';
+    default:             return '#ffffff';
   }
 }
 
-function cellBorder(cell) {
-  if (cell.type === 'void') return 'none';
-  return '1px solid rgba(0,0,0,0.1)';
-}
-
-// ─── Individual board cell ────────────────────────────────────────────────────
-function BoardCell({ cell, row, col, tokens, movableTokenIds, selectedTokenId, onTokenClick, boardSize }) {
-  const cellPx = boardSize / 15;
-
-  const handleClick = useCallback(() => {
-    if (tokens.length === 1) {
-      onTokenClick?.(tokens[0].playerId, tokens[0].tokenId);
-    }
-  }, [tokens, onTokenClick]);
-
-  const hasMovable = tokens.some(t => movableTokenIds.includes(t.tokenId));
+// ─── Single board cell ────────────────────────────────────────────────────────
+function Cell({ cell, row, col, tokensHere, movableTokenIds, onTokenClick, cellPx }) {
+  const hasMovable = tokensHere.some(t => movableTokenIds.includes(t.tokenId));
 
   return (
     <div
-      onClick={tokens.length > 0 ? handleClick : undefined}
       style={{
-        width: cellPx,
-        height: cellPx,
-        backgroundColor: cellBackground(cell),
-        border: cellBorder(cell),
+        width: cellPx, height: cellPx,
+        backgroundColor: cellBg(cell),
+        border: cell.type === 'void' ? 'none' : '0.5px solid rgba(0,0,0,0.12)',
         position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
         cursor: hasMovable ? 'pointer' : 'default',
         flexShrink: 0,
+        overflow: 'hidden',
       }}
+      onClick={hasMovable && tokensHere.length === 1
+        ? () => onTokenClick?.(tokensHere[0].playerId, tokensHere[0].tokenId)
+        : undefined}
     >
       {/* Safe zone star */}
-      {cell.type === 'safe' && (
-        <span style={{ position: 'absolute', opacity: 0.35, fontSize: cellPx * 0.55, lineHeight: 1 }}>
-          ⭐
-        </span>
-      )}
-
-      {/* Start player icon */}
-      {cell.type === 'start' && (
-        <span style={{ position: 'absolute', opacity: 0.25, fontSize: cellPx * 0.5, lineHeight: 1 }}>
+      {(cell.type === 'safe' || cell.type === 'start') && (
+        <span style={{ position: 'absolute', fontSize: cellPx * 0.52, opacity: cell.type === 'start' ? 0.5 : 0.4, pointerEvents: 'none' }}>
           ⭐
         </span>
       )}
@@ -89,47 +54,40 @@ function BoardCell({ cell, row, col, tokens, movableTokenIds, selectedTokenId, o
       {/* Center diamond */}
       {cell.type === 'center' && (
         <div style={{
-          width: cellPx * 0.6,
-          height: cellPx * 0.6,
-          background: 'linear-gradient(135deg, #ef4444 25%, #3b82f6 25% 50%, #22c55e 50% 75%, #eab308 75%)',
+          width: cellPx * 0.7, height: cellPx * 0.7,
+          background: 'conic-gradient(#ef4444 0 25%, #3b82f6 25% 50%, #22c55e 50% 75%, #eab308 75%)',
           transform: 'rotate(45deg)',
           borderRadius: 2,
         }} />
       )}
 
-      {/* Movable highlight pulse */}
+      {/* Movable highlight */}
       {hasMovable && (
         <motion.div
-          animate={{ opacity: [0.3, 0.7, 0.3] }}
-          transition={{ duration: 0.8, repeat: Infinity }}
-          style={{
-            position: 'absolute', inset: 0,
-            backgroundColor: '#facc15',
-            pointerEvents: 'none',
-          }}
+          animate={{ opacity: [0.25, 0.6, 0.25] }}
+          transition={{ duration: 0.7, repeat: Infinity }}
+          style={{ position: 'absolute', inset: 0, backgroundColor: '#facc15', pointerEvents: 'none' }}
         />
       )}
 
-      {/* Tokens */}
-      {tokens.length > 0 && (
+      {/* Tokens stacked */}
+      {tokensHere.length > 0 && (
         <div style={{
-          position: 'absolute', inset: 0,
+          position: 'absolute', inset: 0, zIndex: 2,
           display: 'flex', flexWrap: 'wrap',
           alignItems: 'center', justifyContent: 'center',
           gap: 1, padding: 1,
-          zIndex: 2,
         }}>
-          {tokens.map((t, idx) => (
+          {tokensHere.map((t, idx) => (
             <Token
               key={`${t.playerId}-${t.tokenId}`}
               playerId={t.playerId}
               tokenId={t.tokenId}
-              size={tokens.length > 1 ? 'sm' : 'md'}
+              size={tokensHere.length > 1 ? 'sm' : 'md'}
               isSelectable={movableTokenIds.includes(t.tokenId)}
-              isSelected={selectedTokenId === t.tokenId}
               isShielded={t.token.isShielded}
               isFrozen={t.token.isFrozen}
-              stacked={tokens.length > 1}
+              stacked={tokensHere.length > 1}
               stackIndex={idx}
               onClick={() => onTokenClick?.(t.playerId, t.tokenId)}
             />
@@ -140,77 +98,96 @@ function BoardCell({ cell, row, col, tokens, movableTokenIds, selectedTokenId, o
   );
 }
 
-// ─── Home base corner (tokens in 2×2 grid slots) ─────────────────────────────
-function HomeBase({ player, tokens, movableTokenIds, selectedTokenId, onTokenClick, cellPx }) {
-  const positions = HOME_BASE_POSITIONS[player];
-  const homeTokens = tokens[player]?.filter(t => t.token.position === -1) || [];
+// ─── Home base overlay — big colored circle with 4 token slots ────────────────
+function HomeBase({ player, homeTokens, movableTokenIds, onTokenClick, cellPx }) {
   const color = PLAYER_COLORS[player];
+  const pad   = cellPx * 0.7;
+  const diam  = cellPx * 6 - pad * 2;   // circle diameter
+  const slotR = (diam / 2 - cellPx * 0.3) * 0.58; // token slot radius from center
+
+  const slotPositions = [
+    { top: '22%', left: '22%' },
+    { top: '22%', right: '22%' },
+    { bottom: '22%', left: '22%' },
+    { bottom: '22%', right: '22%' },
+  ];
 
   return (
     <div style={{
-      position: 'absolute',
-      inset: cellPx * 0.5,
-      backgroundColor: color.primary + '22',
-      border: `2px solid ${color.primary}55`,
-      borderRadius: 8,
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: cellPx * 0.1,
-      padding: cellPx * 0.2,
-      alignItems: 'center',
-      justifyContent: 'center',
+      position: 'absolute', inset: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      {Array.from({ length: 4 }).map((_, i) => {
-        const t = homeTokens[i];
-        return (
-          <div
-            key={i}
-            style={{
-              width: cellPx * 1.1,
-              height: cellPx * 1.1,
-              borderRadius: '50%',
-              backgroundColor: t ? 'transparent' : color.primary + '33',
-              border: `2px dashed ${color.primary}55`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {t && (
-              <Token
-                playerId={player}
-                tokenId={t.token.id}
-                size="md"
-                isSelectable={movableTokenIds.includes(t.token.id)}
-                isSelected={selectedTokenId === t.token.id}
-                isShielded={t.token.isShielded}
-                isFrozen={t.token.isFrozen}
-                onClick={() => onTokenClick?.(player, t.token.id)}
-              />
-            )}
-          </div>
-        );
-      })}
+      {/* Outer ring */}
+      <div style={{
+        width: diam, height: diam,
+        borderRadius: '50%',
+        backgroundColor: color.primary,
+        boxShadow: `0 2px 12px ${color.primary}55`,
+        position: 'relative',
+      }}>
+        {/* Inner lighter circle */}
+        <div style={{
+          position: 'absolute',
+          inset: '12%',
+          borderRadius: '50%',
+          backgroundColor: color.light,
+          opacity: 0.4,
+        }} />
+
+        {/* 4 token slots */}
+        {slotPositions.map((pos, i) => {
+          const t = homeTokens[i];
+          const slotSize = cellPx * 1.15;
+          return (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                width: slotSize, height: slotSize,
+                borderRadius: '50%',
+                backgroundColor: 'rgba(255,255,255,0.25)',
+                border: '1.5px solid rgba(255,255,255,0.35)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transform: 'translate(-50%,-50%)',
+                ...Object.fromEntries(
+                  Object.entries(pos).map(([k, v]) => [k, typeof v === 'string' && v.endsWith('%')
+                    ? `calc(${v})` : v])
+                ),
+                // override: use left/top with percent
+                left: pos.left, top: pos.top,
+                right: pos.right, bottom: pos.bottom,
+                transform: undefined,
+              }}
+            >
+              {t && (
+                <Token
+                  playerId={player}
+                  tokenId={t.token.id}
+                  size="md"
+                  isSelectable={movableTokenIds.includes(t.token.id)}
+                  isShielded={t.token.isShielded}
+                  isFrozen={t.token.isFrozen}
+                  onClick={() => onTokenClick?.(player, t.token.id)}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-// ─── Main Board component ─────────────────────────────────────────────────────
-export default function Board({
-  players,
-  movableTokenIds = [],
-  selectedTokenId = null,
-  onTokenClick,
-  boardSize = 315,
-}) {
+// ─── Main Board ───────────────────────────────────────────────────────────────
+export default function Board({ players, movableTokenIds = [], onTokenClick, boardSize = 360 }) {
   const cellPx = boardSize / 15;
 
-  // Build token-by-cell lookup
+  // Tokens on the main/home-stretch path, keyed by "row,col"
   const tokensByCell = useMemo(() => {
     const map = {};
     for (const player of players) {
       for (const token of player.tokens) {
-        if (token.position === -1) continue; // handled by HomeBase
+        if (token.position < 0) continue;
         const cell = getTokenCell(player.id, token.position);
         if (!cell) continue;
         const key = `${cell[0]},${cell[1]}`;
@@ -221,8 +198,8 @@ export default function Board({
     return map;
   }, [players]);
 
-  // Build player token lookup for HomeBase
-  const homeTokensByPlayer = useMemo(() => {
+  // Home-base tokens per player
+  const homeToksByPlayer = useMemo(() => {
     const map = {};
     for (const player of players) {
       map[player.id] = player.tokens
@@ -232,84 +209,66 @@ export default function Board({
     return map;
   }, [players]);
 
+  // Corner positions for home-base overlays
+  const corners = {
+    red:    { top: 0,    left: 0 },
+    blue:   { top: 0,    right: 0 },
+    green:  { bottom: 0, right: 0 },
+    yellow: { bottom: 0, left: 0 },
+  };
+
   return (
-    <div
-      style={{
-        width: boardSize,
-        height: boardSize,
-        position: 'relative',
-        userSelect: 'none',
-        flexShrink: 0,
-      }}
-    >
-      {/* Grid of cells */}
+    <div style={{
+      width: boardSize, height: boardSize,
+      position: 'relative',
+      borderRadius: 6,
+      overflow: 'hidden',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+      border: '3px solid #92400e',
+      userSelect: 'none',
+      flexShrink: 0,
+    }}>
+      {/* 15×15 grid */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: `repeat(15, ${cellPx}px)`,
-        gridTemplateRows: `repeat(15, ${cellPx}px)`,
-        width: boardSize,
-        height: boardSize,
+        gridTemplateRows:    `repeat(15, ${cellPx}px)`,
+        width: boardSize, height: boardSize,
       }}>
         {CELL_MAP.map((row, r) =>
-          row.map((cell, c) => {
-            const tokensHere = tokensByCell[`${r},${c}`] || [];
-            // Home base areas are drawn as overlays; render base cells as colored only
-            return (
-              <BoardCell
-                key={`${r}-${c}`}
-                cell={cell}
-                row={r}
-                col={c}
-                tokens={tokensHere}
-                movableTokenIds={movableTokenIds}
-                selectedTokenId={selectedTokenId}
-                onTokenClick={onTokenClick}
-                boardSize={boardSize}
-              />
-            );
-          })
-        )}
-      </div>
-
-      {/* Home base overlays with token slots */}
-      {PLAYERS.map(player => {
-        const corners = {
-          red:    { top: 0, left: 0 },
-          blue:   { top: 0, right: 0 },
-          green:  { bottom: 0, right: 0 },
-          yellow: { bottom: 0, left: 0 },
-        };
-        return (
-          <div
-            key={player}
-            style={{
-              position: 'absolute',
-              width: cellPx * 6,
-              height: cellPx * 6,
-              ...corners[player],
-            }}
-          >
-            <HomeBase
-              player={player}
-              tokens={homeTokensByPlayer}
+          row.map((cell, c) => (
+            <Cell
+              key={`${r}-${c}`}
+              cell={cell} row={r} col={c}
+              tokensHere={tokensByCell[`${r},${c}`] || []}
               movableTokenIds={movableTokenIds}
-              selectedTokenId={selectedTokenId}
               onTokenClick={onTokenClick}
               cellPx={cellPx}
             />
-          </div>
-        );
-      })}
+          ))
+        )}
+      </div>
 
-      {/* Board border */}
-      <div
-        style={{
-          position: 'absolute', inset: 0,
-          border: '3px solid #92400e',
-          borderRadius: 4,
-          pointerEvents: 'none',
-        }}
-      />
+      {/* Home-base circle overlays */}
+      {PLAYERS.map(player => (
+        <div
+          key={player}
+          style={{
+            position: 'absolute',
+            width: cellPx * 6, height: cellPx * 6,
+            ...corners[player],
+            pointerEvents: 'none',
+          }}
+        >
+          <HomeBase
+            player={player}
+            homeTokens={homeToksByPlayer[player] || []}
+            movableTokenIds={movableTokenIds}
+            onTokenClick={onTokenClick}
+            cellPx={cellPx}
+          />
+        </div>
+      ))}
     </div>
   );
 }

@@ -1,27 +1,26 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useGameStore, selectCurrentPlayer, selectIsMyTurn } from '../store/gameStore';
-import { GAME_PHASES, GAME_MODES, PLAYER_COLORS, AI_DIFFICULTY } from '../game-logic/constants';
-import { chooseBotMove, chooseBotPowerCard } from '../game-logic/aiBot';
-import { getValidMoves } from '../game-logic/gameRules';
+import { motion } from 'framer-motion';
+import { useGameStore } from '../store/gameStore';
+import { GAME_PHASES, GAME_MODES, PLAYER_COLORS } from '../game-logic/constants';
+import { chooseBotMove } from '../game-logic/aiBot';
 import Board from '../components/Board';
 import PlayerHUD from '../components/PlayerHUD';
-import GameControls from '../components/GameControls';
+import DiceRoller from '../components/DiceRoller';
 import { playSound } from '../utils/sounds';
 
 export default function GameScreen() {
-  const players           = useGameStore(s => s.players);
+  const players            = useGameStore(s => s.players);
   const currentPlayerIndex = useGameStore(s => s.currentPlayerIndex);
-  const phase             = useGameStore(s => s.phase);
-  const diceValues        = useGameStore(s => s.diceValues);
-  const diceRolled        = useGameStore(s => s.diceRolled);
-  const movableTokens     = useGameStore(s => s.movableTokens);
-  const selectedCardType  = useGameStore(s => s.selectedCardType);
-  const mode              = useGameStore(s => s.mode);
-  const gameType          = useGameStore(s => s.gameType);
-  const localPlayerId     = useGameStore(s => s.localPlayerId);
+  const phase              = useGameStore(s => s.phase);
+  const diceValues         = useGameStore(s => s.diceValues);
+  const diceRolled         = useGameStore(s => s.diceRolled);
+  const movableTokens      = useGameStore(s => s.movableTokens);
+  const selectedCardType   = useGameStore(s => s.selectedCardType);
+  const mode               = useGameStore(s => s.mode);
+  const gameType           = useGameStore(s => s.gameType);
+  const localPlayerId      = useGameStore(s => s.localPlayerId);
 
-  const rollDice          = useGameStore(s => s.rollDice);
+  const rollDiceAction    = useGameStore(s => s.rollDice);
   const moveToken         = useGameStore(s => s.moveToken);
   const activatePowerCard = useGameStore(s => s.activatePowerCard);
   const applyPowerCard    = useGameStore(s => s.applyPowerCard);
@@ -30,182 +29,188 @@ export default function GameScreen() {
   const resetGame         = useGameStore(s => s.resetGame);
   const setScreen         = useGameStore(s => s.setScreen);
 
-  const [isRolling, setIsRolling] = useState(false);
+  const [isRolling, setIsRolling]       = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(null);
-  const botTimerRef = useRef(null);
+  const botTimerRef  = useRef(null);
   const turnTimerRef = useRef(null);
 
   const currentPlayer = players[currentPlayerIndex];
   const isMyTurn      = gameType === 'local' || currentPlayer?.id === localPlayerId;
   const isBot         = currentPlayer?.type === 'ai';
+  const color         = PLAYER_COLORS[currentPlayer?.id] ?? PLAYER_COLORS.red;
 
-  // ── Timer (Blitz mode) ────────────────────────────────────────────────────
+  // ── Blitz timer ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (mode !== GAME_MODES.BLITZ) { setTimerSeconds(null); return; }
     setTimerSeconds(15);
     const id = setInterval(() => {
-      setTimerSeconds(prev => {
-        if (prev <= 1) { forceSkipTurn(); return 15; }
-        return prev - 1;
-      });
+      setTimerSeconds(p => { if (p <= 1) { forceSkipTurn(); return 15; } return p - 1; });
     }, 1000);
     turnTimerRef.current = id;
     return () => clearInterval(id);
   }, [currentPlayerIndex, mode]);
 
-  // ── Bot turns ──────────────────────────────────────────────────────────────
+  // ── Bot: roll ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isBot || !isMyTurn) return;
-
-    const delay = (ms) => new Promise(res => setTimeout(res, ms));
-
-    async function runBot() {
-      if (phase === GAME_PHASES.ROLLING) {
-        await delay(900);
-        handleRoll();
-      }
-    }
-
-    botTimerRef.current = setTimeout(runBot, 600);
+    if (!isBot || phase !== GAME_PHASES.ROLLING) return;
+    botTimerRef.current = setTimeout(() => {
+      handleRoll();
+    }, 500);   // ← was 600+900 ms, now 500 ms
     return () => clearTimeout(botTimerRef.current);
   }, [phase, currentPlayerIndex, isBot]);
 
-  // ── Bot move after dice ────────────────────────────────────────────────────
+  // ── Bot: move ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isBot || phase !== GAME_PHASES.MOVING) return;
-    const timer = setTimeout(() => {
+    const t = setTimeout(() => {
       const move = chooseBotMove(currentPlayer, diceValues[0], players, currentPlayer.aiDifficulty);
-      if (move) {
-        playSound('move');
-        moveToken(move.tokenId);
-      } else {
-        forceSkipTurn();
-      }
-    }, 700);
-    return () => clearTimeout(timer);
+      if (move) { playSound('move'); moveToken(move.tokenId); }
+      else forceSkipTurn();
+    }, 400);   // ← was 700 ms, now 400 ms
+    return () => clearTimeout(t);
   }, [phase, isBot, diceValues]);
 
-  // ── Handle roll ────────────────────────────────────────────────────────────
+  // ── Human: roll ───────────────────────────────────────────────────────────
   const handleRoll = useCallback(() => {
     if (isRolling || phase !== GAME_PHASES.ROLLING) return;
     setIsRolling(true);
     playSound('dice');
-    setTimeout(() => {
-      rollDice();
-      setIsRolling(false);
-    }, 650);
-  }, [isRolling, phase, rollDice]);
+    setTimeout(() => { rollDiceAction(); setIsRolling(false); }, 500);
+  }, [isRolling, phase, rollDiceAction]);
 
-  // ── Handle token click ─────────────────────────────────────────────────────
+  // ── Token click ───────────────────────────────────────────────────────────
   const handleTokenClick = useCallback((playerId, tokenId) => {
     if (phase === GAME_PHASES.MOVING && movableTokens.includes(tokenId)) {
       playSound('move');
       moveToken(tokenId);
     } else if (phase === GAME_PHASES.POWER && selectedCardType) {
-      // Power card target selected
       applyPowerCard(selectedCardType, { tokenId, targetPlayerId: playerId });
     }
   }, [phase, movableTokens, selectedCardType, moveToken, applyPowerCard]);
 
-  // Board size responsive
-  const boardSize = Math.min(window.innerWidth - 16, 420);
+  // Board fills whatever space is left between the two HUD rows and controls
+  const boardSize = Math.min(430 - 8, window.innerWidth - 8);
+
+  const canRoll = phase === GAME_PHASES.ROLLING && !diceRolled && isMyTurn && !isBot;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-indigo-950 to-gray-900 flex flex-col items-center">
-      {/* Top bar */}
-      <div className="w-full max-w-[440px] flex items-center justify-between px-4 py-3">
+    <div className="flex flex-col h-screen bg-gradient-to-b from-gray-900 to-indigo-950 overflow-hidden">
+
+      {/* ── Top bar ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-4 py-2 flex-shrink-0">
         <button
           onClick={() => { if (window.confirm('Quit game?')) { resetGame(); setScreen('home'); } }}
-          className="text-white/60 hover:text-white text-xl"
+          className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 text-white/70 text-lg leading-none"
         >
           ×
         </button>
-        <span className="text-white/70 text-xs font-semibold uppercase tracking-widest">
-          {mode === GAME_MODES.POWER ? '⚡ Power Mode' : mode === GAME_MODES.BLITZ ? '⏱ Blitz' : '🎯 Classic'}
+
+        {/* Turn pill */}
+        <motion.div
+          key={currentPlayer?.id}
+          initial={{ y: -8, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+          className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10"
+        >
+          <motion.div
+            animate={{ scale: [1, 1.4, 1] }}
+            transition={{ duration: 0.7, repeat: Infinity }}
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: color.primary }}
+          />
+          <span className="text-white text-xs font-semibold">
+            {currentPlayer?.name}{isBot ? ' 🤖' : "'s turn"}
+          </span>
+        </motion.div>
+
+        <span className="text-white/40 text-[10px] font-semibold uppercase tracking-wider">
+          {mode === GAME_MODES.POWER ? '⚡' : mode === GAME_MODES.BLITZ ? '⏱' : '🎯'}
         </span>
-        <div className="w-6" />
       </div>
 
-      {/* Player HUDs — top 2 players */}
-      <div className="w-full max-w-[440px] grid grid-cols-2 gap-2 px-2">
-        {players.slice(0, 2).map(player => (
+      {/* ── Top HUDs (players 0 & 1) ────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-1.5 px-2 flex-shrink-0">
+        {players.slice(0, 2).map(p => (
           <PlayerHUD
-            key={player.id}
-            player={player}
-            isCurrentTurn={players[currentPlayerIndex]?.id === player.id}
-            isLocalPlayer={gameType === 'local' || player.id === localPlayerId}
+            key={p.id}
+            player={p}
+            isCurrentTurn={players[currentPlayerIndex]?.id === p.id}
+            isLocalPlayer={gameType === 'local' || p.id === localPlayerId}
             mode={mode}
             onSelectPowerCard={activatePowerCard}
-            activePowerCardType={players[currentPlayerIndex]?.id === player.id ? selectedCardType : null}
-            timerSeconds={players[currentPlayerIndex]?.id === player.id ? timerSeconds : null}
+            activePowerCardType={players[currentPlayerIndex]?.id === p.id ? selectedCardType : null}
+            timerSeconds={players[currentPlayerIndex]?.id === p.id ? timerSeconds : null}
           />
         ))}
       </div>
 
-      {/* Board */}
-      <div className="my-2 flex-shrink-0" style={{ touchAction: 'none' }}>
+      {/* ── Board ───────────────────────────────────────────────────────── */}
+      <div className="flex-1 flex items-center justify-center py-1" style={{ touchAction: 'none' }}>
         <Board
           players={players}
           movableTokenIds={phase === GAME_PHASES.MOVING && isMyTurn && !isBot ? movableTokens : []}
-          selectedTokenId={null}
           onTokenClick={isMyTurn && !isBot ? handleTokenClick : undefined}
-          boardSize={boardSize}
+          boardSize={Math.min(boardSize, 380)}
         />
       </div>
 
-      {/* Player HUDs — bottom 2 players */}
+      {/* ── Bottom HUDs (players 2 & 3) ─────────────────────────────────── */}
       {players.length > 2 && (
-        <div className="w-full max-w-[440px] grid grid-cols-2 gap-2 px-2">
-          {players.slice(2, 4).map(player => (
+        <div className="grid grid-cols-2 gap-1.5 px-2 flex-shrink-0">
+          {players.slice(2, 4).map(p => (
             <PlayerHUD
-              key={player.id}
-              player={player}
-              isCurrentTurn={players[currentPlayerIndex]?.id === player.id}
-              isLocalPlayer={gameType === 'local' || player.id === localPlayerId}
+              key={p.id}
+              player={p}
+              isCurrentTurn={players[currentPlayerIndex]?.id === p.id}
+              isLocalPlayer={gameType === 'local' || p.id === localPlayerId}
               mode={mode}
               onSelectPowerCard={activatePowerCard}
-              activePowerCardType={players[currentPlayerIndex]?.id === player.id ? selectedCardType : null}
-              timerSeconds={players[currentPlayerIndex]?.id === player.id ? timerSeconds : null}
+              activePowerCardType={players[currentPlayerIndex]?.id === p.id ? selectedCardType : null}
+              timerSeconds={players[currentPlayerIndex]?.id === p.id ? timerSeconds : null}
             />
           ))}
         </div>
       )}
 
-      {/* Controls */}
-      {isMyTurn && !isBot && (
-        <div className="w-full max-w-[440px] px-4 pb-4 mt-2">
-          <div className="bg-white/8 rounded-2xl p-3 border border-white/10">
-            <GameControls
-              currentPlayer={currentPlayer}
-              phase={phase}
-              diceValues={diceValues}
+      {/* ── Controls / Dice ─────────────────────────────────────────────── */}
+      <div className="flex-shrink-0 px-3 pb-3 pt-1">
+        {isBot && isMyTurn ? (
+          <div className="flex items-center justify-center gap-2 py-3 bg-white/5 rounded-2xl border border-white/10">
+            <motion.span
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+              className="text-lg"
+            >⚙️</motion.span>
+            <span className="text-white/60 text-sm">{currentPlayer?.name} is thinking…</span>
+          </div>
+        ) : (
+          <div className="bg-white/5 rounded-2xl border border-white/10 p-3 flex items-center justify-between gap-4">
+            {/* Dice display */}
+            <DiceRoller
+              values={diceValues}
               isRolling={isRolling}
-              canRoll={phase === GAME_PHASES.ROLLING && !diceRolled && isMyTurn}
+              canRoll={canRoll}
               onRoll={handleRoll}
+              compact
             />
 
-            {/* Power card cancel */}
-            {selectedCardType && (
-              <button
-                onClick={cancelPowerCard}
-                className="mt-2 w-full py-2 rounded-xl bg-red-500/20 text-red-300 text-xs font-semibold border border-red-500/30"
-              >
-                Cancel Power Card
-              </button>
-            )}
+            {/* Phase hint */}
+            <div className="flex-1 text-right">
+              {phase === GAME_PHASES.ROLLING && !diceRolled && (
+                <p className="text-white/50 text-xs">Tap <b className="text-white/80">Roll Dice</b></p>
+              )}
+              {phase === GAME_PHASES.MOVING && (
+                <p className="text-yellow-400/80 text-xs font-semibold">Tap a glowing token</p>
+              )}
+              {phase === GAME_PHASES.POWER && (
+                <div>
+                  <p className="text-purple-400 text-xs font-semibold">Select a target token</p>
+                  <button onClick={cancelPowerCard} className="text-red-400/70 text-[10px] mt-0.5">cancel</button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Bot thinking overlay */}
-      {isBot && isMyTurn && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-black/70 text-white/80 px-5 py-2 rounded-full text-sm flex items-center gap-2">
-          <motion.span animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-            ⚙️
-          </motion.span>
-          {currentPlayer?.name} is thinking…
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

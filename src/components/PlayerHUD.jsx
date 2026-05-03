@@ -12,71 +12,54 @@ export default function PlayerHUD({
   timerSeconds,
 }) {
   const color = PLAYER_COLORS[player.id];
-  const remaining = TOKEN_COUNT - player.finishedCount;
+  const finished = player.finishedCount;
 
   return (
     <motion.div
       animate={{
-        borderColor: isCurrentTurn ? color.primary : 'rgba(255,255,255,0.1)',
-        boxShadow: isCurrentTurn ? `0 0 16px 2px ${color.primary}55` : 'none',
+        borderColor: isCurrentTurn ? color.primary : 'rgba(255,255,255,0.07)',
+        backgroundColor: isCurrentTurn ? `${color.primary}18` : 'rgba(255,255,255,0.04)',
       }}
-      transition={{ duration: 0.3 }}
-      className={`
-        rounded-2xl border-2 p-3 flex flex-col gap-2
-        ${isCurrentTurn ? 'bg-white/10' : 'bg-white/5'}
-      `}
+      transition={{ duration: 0.25 }}
+      className="rounded-xl border px-2.5 py-2 flex flex-col gap-1.5"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-4 h-4 rounded-full border-2 border-white/30"
-            style={{ backgroundColor: color.primary }}
+      {/* Row 1: color dot + name + turn dot */}
+      <div className="flex items-center gap-1.5">
+        <div
+          className="w-3 h-3 rounded-full flex-shrink-0 border border-white/20"
+          style={{ backgroundColor: color.primary }}
+        />
+        <span className="text-white/90 font-semibold text-xs truncate flex-1">
+          {player.name}
+          {player.type === 'ai' && <span className="text-white/30 ml-0.5">🤖</span>}
+        </span>
+        {/* Home tokens count */}
+        <span className="text-white/40 text-[10px]">
+          {finished > 0 && `${finished}⭐`}
+        </span>
+        {isCurrentTurn && (
+          <motion.div
+            animate={{ scale: [1, 1.5, 1] }}
+            transition={{ duration: 0.6, repeat: Infinity }}
+            className="w-2 h-2 rounded-full bg-yellow-400 flex-shrink-0"
           />
-          <span className="text-white font-bold text-sm truncate max-w-[100px]">
-            {player.name}
-            {player.type === 'ai' && (
-              <span className="ml-1 text-[10px] text-white/50">🤖</span>
-            )}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1">
-          {/* Token count */}
-          <span className="text-white/70 text-xs">{remaining} left</span>
-          {isCurrentTurn && (
-            <motion.div
-              animate={{ scale: [1, 1.3, 1] }}
-              transition={{ duration: 0.6, repeat: Infinity }}
-              className="w-2 h-2 rounded-full bg-yellow-400"
-            />
-          )}
-        </div>
+        )}
       </div>
 
-      {/* Finished tokens */}
-      {player.finishedCount > 0 && (
-        <div className="flex gap-1">
-          {Array.from({ length: player.finishedCount }).map((_, i) => (
-            <span key={i} className="text-sm">⭐</span>
-          ))}
-        </div>
-      )}
-
-      {/* Turn timer */}
-      {isCurrentTurn && timerSeconds !== null && timerSeconds !== undefined && (
-        <div className="w-full bg-white/20 rounded-full h-1.5">
+      {/* Blitz timer bar */}
+      {isCurrentTurn && timerSeconds !== null && (
+        <div className="h-1 rounded-full bg-white/10 overflow-hidden">
           <motion.div
             className="h-full rounded-full bg-yellow-400"
             animate={{ width: `${(timerSeconds / 15) * 100}%` }}
-            transition={{ duration: 0.5 }}
+            transition={{ duration: 0.4 }}
           />
         </div>
       )}
 
       {/* Power cards */}
       {mode === GAME_MODES.POWER && player.powerCards.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
+        <div className="flex gap-1 overflow-x-auto scrollbar-hide">
           {player.powerCards.map(card => (
             <PowerCard
               key={card.id}
